@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { authAttempts } from '../middleware/validation';
 import bcrypt from 'bcrypt';
 import passport from 'passport';
 import { getDB } from '../middleware/database';
@@ -14,7 +15,8 @@ import { googleAuth } from './googleAuth';
 
 export const register = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { email, password } = req.body;
+    let { email, password } = req.body as any;
+    email = String(email).trim().toLowerCase();
         
         if (!email || !password) {
             res.status(400).json({ message: 'Email and password are required' });
@@ -69,6 +71,9 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 };
 
 export const login = (req: Request, res: Response, next: NextFunction): void => {
+    if (req.body && req.body.email) {
+        (req.body as any).email = String(req.body.email).trim().toLowerCase();
+    }
     passport.authenticate('local', async (err: any, user: any, info: any) => {
         if (err) {
             next(err);
@@ -76,6 +81,7 @@ export const login = (req: Request, res: Response, next: NextFunction): void => 
         }
         
         if (!user) {
+            authAttempts.bumpFailure(req);
             res.status(400).json({ 
                 message: info?.message || 'Incorrect credentials' 
             });
@@ -96,6 +102,8 @@ export const login = (req: Request, res: Response, next: NextFunction): void => 
                 }
             });
             
+            // successful login: reset failure counter
+            authAttempts.reset(req);
             res.json({
                 message: 'Successful authorization',
                 accessToken,

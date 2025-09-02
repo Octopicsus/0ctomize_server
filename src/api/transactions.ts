@@ -9,6 +9,7 @@ export interface Transaction {
     title: string;
     description: string;
     notes?: string;
+    bankAccountId?: string; // link to originating bank account for imported transactions
     amount: number;
     originalAmount: number;
     originalCurrency: string;
@@ -18,6 +19,14 @@ export interface Transaction {
     color: string;
     createdAt?: Date;
     updatedAt?: Date;
+    category?: string;
+    categoryConfidence?: number;
+    categorySource?: 'auto' | 'manual' | 'rule' | 'llm' | 'override';
+    categoryReason?: string;
+    source?: 'bank' | 'manual';
+    keyHash?: string; // pattern key reference
+    enrichStatus?: 'pending' | 'processing' | 'done' | 'failed';
+    enrichAttempts?: number;
 }
 
 export const transactionsAPI = {

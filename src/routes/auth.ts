@@ -7,12 +7,13 @@ import {
     verify,
     googleAuth
 } from '../api/auth';
+import { validateRegistration, validateLogin, rateLimitAuth } from '../middleware/validation';
 import { authenticateJWT } from '../middleware/auth';
 
 const router = Router();
 
-router.post('/register', register);
-router.post('/login', login);
+router.post('/register', validateRegistration, register);
+router.post('/login', rateLimitAuth, validateLogin, login);
 router.post('/refresh', refreshTokenHandler);
 router.post('/logout', logout);
 router.get('/verify', authenticateJWT, verify);

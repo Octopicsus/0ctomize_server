@@ -4,9 +4,12 @@
   "main": "index.js",
   "scripts": {
     "start": "node dist/app.js",
-    "dev": "nodemon src/app.ts",
+  "dev": "nodemon",
     "build": "tsc",
     "build:watch": "tsc -w"
+  ,"migrate:bank-notes": "npm run build && node dist/scripts/migrate_bank_notes.js"
+  ,"dedupe:bank": "npm run build && node dist/scripts/dedupe_bank_transactions.js"
+  ,"migrate:patterns": "npm run build && node dist/scripts/migrate_patterns.js"
   },
   "keywords": [],
   "author": "",

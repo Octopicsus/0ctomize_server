@@ -14,6 +14,7 @@ passport.use('local', new LocalStrategy(
     },
     async (email: string, password: string, done) => {
         try {
+            email = String(email).trim().toLowerCase();
             const db = getDB();
             const users = db.collection('users');
             const user = await users.findOne({ email });
@@ -22,7 +23,17 @@ passport.use('local', new LocalStrategy(
                 return done(null, false, { message: 'Incorrect credentials' });
             }
             
-            const isPasswordValid = await bcrypt.compare(password, user.password);
+            if (!user.password || typeof user.password !== 'string') {
+                return done(null, false, { message: 'Incorrect credentials' });
+            }
+
+            let isPasswordValid = false;
+            try {
+                isPasswordValid = await bcrypt.compare(password, user.password);
+            } catch (e) {
+                // If stored hash is invalid/corrupted, do not leak; treat as incorrect
+                return done(null, false, { message: 'Incorrect credentials' });
+            }
 
             if (!isPasswordValid) {
                 return done(null, false, { message: 'Incorrect credentials' });

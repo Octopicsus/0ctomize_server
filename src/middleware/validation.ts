@@ -22,7 +22,7 @@ export const validatePassword = (password: string): { isValid: boolean; message?
 };
 
 export const validateRegistration = (req: Request, res: Response, next: NextFunction): void => {
-    const { email, password } = req.body;
+    let { email, password } = req.body;
     
     if (!email || !password) {
         res.status(400).json({ 
@@ -30,6 +30,8 @@ export const validateRegistration = (req: Request, res: Response, next: NextFunc
         });
         return;
     }
+    email = String(email).trim().toLowerCase();
+    (req.body as any).email = email;
     
     if (!validateEmail(email)) {
         res.status(400).json({ 
@@ -57,7 +59,7 @@ export const validateRegistration = (req: Request, res: Response, next: NextFunc
 };
 
 export const validateLogin = (req: Request, res: Response, next: NextFunction): void => {
-    const { email, password } = req.body;
+    let { email, password } = req.body;
     
     if (!email || !password) {
         res.status(400).json({ 
@@ -65,6 +67,8 @@ export const validateLogin = (req: Request, res: Response, next: NextFunction): 
         });
         return;
     }
+    email = String(email).trim().toLowerCase();
+    (req.body as any).email = email;
     
     if (!validateEmail(email)) {
         res.status(400).json({ 
@@ -77,30 +81,47 @@ export const validateLogin = (req: Request, res: Response, next: NextFunction): 
 };
 
 const attemptMap = new Map<string, { count: number; lastAttempt: number }>();
+const windowMs = 15 * 60 * 1000; // 15 minutes
+const maxAttempts = 5;
+
+function keyFor(req: Request) {
+    const ip = req.ip || (req.connection as any)?.remoteAddress || 'unknown';
+    const email = (req.body?.email || req.query?.email || '').toString().trim().toLowerCase();
+    return `${ip}|${email}`;
+}
+
+export const authAttempts = {
+    bumpFailure(req: Request) {
+        const key = keyFor(req);
+        const now = Date.now();
+        const prev = attemptMap.get(key);
+        if (prev && now - prev.lastAttempt <= windowMs) {
+            attemptMap.set(key, { count: prev.count + 1, lastAttempt: now });
+        } else {
+            attemptMap.set(key, { count: 1, lastAttempt: now });
+        }
+    },
+    reset(req: Request) {
+        const key = keyFor(req);
+        attemptMap.delete(key);
+    },
+    isLimited(req: Request) {
+        const key = keyFor(req);
+        const now = Date.now();
+        const prev = attemptMap.get(key);
+        if (!prev) return false;
+        if (now - prev.lastAttempt > windowMs) {
+            attemptMap.delete(key);
+            return false;
+        }
+        return prev.count >= maxAttempts;
+    }
+};
 
 export const rateLimitAuth = (req: Request, res: Response, next: NextFunction): void => {
-    const ip = req.ip || req.connection.remoteAddress || 'unknown';
-    const now = Date.now();
-    const windowMs = 15 * 60 * 1000; 
-    const maxAttempts = 5;
-    
-    const attempts = attemptMap.get(ip);
-    
-    if (attempts) {
-      
-        if (now - attempts.lastAttempt > windowMs) {
-            attemptMap.delete(ip);
-        } else if (attempts.count >= maxAttempts) {
-            res.status(429).json({
-                message: 'Too many authentication attempts. Please try again later.'
-            });
-            return;
-        }
+    if (authAttempts.isLimited(req)) {
+        res.status(429).json({ message: 'Too many authentication attempts. Please try again later.' });
+        return;
     }
-    
-    
-    const currentAttempts = attempts ? attempts.count + 1 : 1;
-    attemptMap.set(ip, { count: currentAttempts, lastAttempt: now });
-    
     next();
 };
