@@ -66,13 +66,18 @@ export async function incrementGlobalSupport(keyHash: string, inc: number = 1) {
   await db.collection('tx_patterns_global').updateOne({ _id: keyHash }, { $inc: { supportCount: inc }, $set: { updatedAt: new Date() } });
 }
 
-export async function upsertUserOverride(userId: string, keyHash: string, rawKey: string, override: { title?: string; category?: string }) {
+export async function upsertUserOverride(userId: any, keyHash: string, rawKey: string, override: { title?: string; category?: string; color?: string; img?: string }) {
   const db = getDB();
-  const userIdObj = new ObjectId(userId);
+  let userIdObj: ObjectId;
+  try {
+    if (userId instanceof ObjectId) userIdObj = userId; else userIdObj = new ObjectId(String(userId));
+  } catch {
+    userIdObj = new ObjectId(); // fallback improbable
+  }
   const now = new Date();
   await db.collection('tx_patterns_user').updateOne(
     { userId: userIdObj, keyHash },
-    { $setOnInsert: { createdAt: now, useCount: 0, rawKey }, $set: { updatedAt: now, rawKey, ...(override.title ? { overrideTitle: override.title } : {}), ...(override.category ? { overrideCategory: override.category } : {}) } },
+  { $setOnInsert: { createdAt: now, useCount: 0, rawKey, keyHash }, $set: { updatedAt: now, ...(override.title ? { overrideTitle: override.title } : {}), ...(override.category ? { overrideCategory: override.category } : {}), ...(override.color ? { lastColor: override.color } : {}), ...(override.img ? { lastImg: override.img } : {}) } },
     { upsert: true }
   );
 }
@@ -81,4 +86,50 @@ export async function bumpUserOverrideUsage(userId: string, keyHash: string) {
   const db = getDB();
   const userIdObj = new ObjectId(userId);
   await db.collection('tx_patterns_user').updateOne({ userId: userIdObj, keyHash }, { $inc: { useCount: 1 }, $set: { updatedAt: new Date() } });
+}
+
+// --- Voting / consensus for global promotion ---
+const BLACKLIST_PATTERNS = ['payment', 'transfer', 'card', 'debit', 'credit']; // overly-generic keys we skip
+
+export interface VoteResult {
+  keyHash: string;
+  leadingCategory?: string;
+  leadingRatio?: number;
+  totalVotes: number;
+  promoted?: boolean;
+}
+
+export async function recordCategoryVote(userId: string, rawKey: string, category: string, opts: { promoteThreshold?: number; minUsers?: number; hysteresisDown?: number } = {}) {
+  const promoteThreshold = opts.promoteThreshold ?? 0.8;
+  const minUsers = opts.minUsers ?? 5;
+  const hysteresisDown = opts.hysteresisDown ?? 0.35; // for future use revert logic
+
+  const keyHash = hashKey(rawKey);
+  const lower = (category || '').trim();
+  if (!lower) return { keyHash, totalVotes: 0 } as VoteResult;
+  if (BLACKLIST_PATTERNS.includes(rawKey)) return { keyHash, totalVotes: 0 } as VoteResult;
+  const db = getDB();
+  const col = db.collection('tx_patterns_votes');
+  const field = `votes.${lower}`;
+  await col.updateOne(
+    { _id: keyHash },
+    { $setOnInsert: { createdAt: new Date(), users: [] }, $set: { updatedAt: new Date(), rawKey }, $inc: { [field]: 1 }, $addToSet: { users: new ObjectId(userId) } },
+    { upsert: true }
+  );
+  const doc = await col.findOne({ _id: keyHash });
+  if (!doc) return { keyHash, totalVotes: 0 } as VoteResult;
+  const votes = doc.votes || {};
+  let total = 0; let topCat: string | undefined; let topCount = 0;
+  for (const k of Object.keys(votes)) {
+    const c = votes[k];
+    total += c;
+    if (c > topCount) { topCount = c; topCat = k; }
+  }
+  const ratio = total > 0 ? topCount / total : 0;
+  let promoted = false;
+  if (topCat && ratio >= promoteThreshold && (doc.users?.length || 0) >= minUsers) {
+    await upsertGlobalPattern({ keyHash, rawKey, canonicalTitle: rawKey.slice(0, 60), category: topCat, categoryConfidence: ratio, categorySource: 'consensus' });
+    promoted = true;
+  }
+  return { keyHash, leadingCategory: topCat, leadingRatio: ratio, totalVotes: total, promoted } as VoteResult;
 }

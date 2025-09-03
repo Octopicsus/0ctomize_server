@@ -62,6 +62,16 @@ async function bootstrap() {
             res.status(500).json({ message: 'error', error: e.message });
         }
     });
+    // Derived coverage / decision helper
+    app.get('/api/debug/enrich/coverage', (_req, res) => {
+        try {
+            const summary = (0, enrichMetrics_1.getCoverageSummary)();
+            res.json({ ok: true, summary });
+        }
+        catch (e) {
+            res.status(500).json({ ok: false, error: e?.message || String(e) });
+        }
+    });
     // SSE stream for enrichment metrics
     app.get('/api/debug/enrich/stream', (req, res) => {
         res.setHeader('Content-Type', 'text/event-stream');
@@ -84,6 +94,16 @@ async function bootstrap() {
         setInterval(() => {
             (0, enrichmentWorker_1.runEnrichmentTick)().catch(e => console.warn('[ENRICH] tick error', e.message));
         }, intervalMs).unref();
+        // Light-weight periodic coverage logging (every ~1 min)
+        const logEveryMs = 60000;
+        setInterval(() => {
+            const c = (0, enrichMetrics_1.getCoverageSummary)();
+            if (c.totalPattern && c.totalPattern % 25 === 0) {
+                // also log on certain counts for more granular early phase
+                console.log(`[ENRICH][coverage milestone] totalPattern=${c.totalPattern} coverage=${c.coverage?.toFixed(3)} missRate=${c.missRate?.toFixed(3)} llmPerPattern=${c.llmPerPattern?.toFixed(3)}`);
+            }
+            console.log(`[ENRICH][coverage] coverage=${c.coverage?.toFixed(3)} missRate=${c.missRate?.toFixed(3)} llmPerPattern=${c.llmPerPattern?.toFixed(3)} suggestRuleExpansion=${c.suggestRuleExpansion}`);
+        }, logEveryMs).unref();
     }
     else {
         console.log('[ENRICH] Worker DISABLED via env');

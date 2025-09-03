@@ -67,7 +67,8 @@ const googleAuth = async (req, res) => {
                 id: user._id,
                 email: user.email,
                 name: user.name,
-                picture: user.picture
+                picture: user.picture,
+                authProvider: 'google'
             }
         });
     }

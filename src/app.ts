@@ -14,7 +14,7 @@ import {
 } from './middleware/index';
 import { authRoutes, usersRoutes, transactionsRoutes, categoriesRoutes, bankdataRoutes } from './routes';
 import { runEnrichmentTick } from './utils/enrichmentWorker';
-import { getMetrics, snapshotMetrics } from './utils/enrichMetrics';
+import { getMetrics, snapshotMetrics, getCoverageSummary } from './utils/enrichMetrics';
 import { getDB } from './middleware/database';
 
 const app = express();
@@ -72,6 +72,16 @@ async function bootstrap() {
         }
     });
 
+    // Derived coverage / decision helper
+    app.get('/api/debug/enrich/coverage', (_req, res) => {
+        try {
+            const summary = getCoverageSummary();
+            res.json({ ok: true, summary });
+        } catch (e: any) {
+            res.status(500).json({ ok: false, error: e?.message || String(e) });
+        }
+    });
+
     // SSE stream for enrichment metrics
     app.get('/api/debug/enrich/stream', (req, res) => {
         res.setHeader('Content-Type', 'text/event-stream');
@@ -95,6 +105,16 @@ async function bootstrap() {
         setInterval(() => {
             runEnrichmentTick().catch(e => console.warn('[ENRICH] tick error', e.message));
         }, intervalMs).unref();
+        // Light-weight periodic coverage logging (every ~1 min)
+        const logEveryMs = 60000;
+        setInterval(() => {
+            const c = getCoverageSummary();
+            if (c.totalPattern && c.totalPattern % 25 === 0) {
+                // also log on certain counts for more granular early phase
+                console.log(`[ENRICH][coverage milestone] totalPattern=${c.totalPattern} coverage=${c.coverage?.toFixed(3)} missRate=${c.missRate?.toFixed(3)} llmPerPattern=${c.llmPerPattern?.toFixed(3)}`);
+            }
+            console.log(`[ENRICH][coverage] coverage=${c.coverage?.toFixed(3)} missRate=${c.missRate?.toFixed(3)} llmPerPattern=${c.llmPerPattern?.toFixed(3)} suggestRuleExpansion=${c.suggestRuleExpansion}`);
+        }, logEveryMs).unref();
     } else {
         console.log('[ENRICH] Worker DISABLED via env');
     }

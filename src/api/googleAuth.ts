@@ -88,7 +88,8 @@ export const googleAuth = async (req: Request, res: Response): Promise<void> => 
                 id: user._id,
                 email: user.email,
                 name: user.name,
-                picture: user.picture
+                picture: user.picture,
+                authProvider: 'google'
             }
         });
 

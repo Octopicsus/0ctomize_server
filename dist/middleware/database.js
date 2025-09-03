@@ -24,6 +24,8 @@ const connectDB = async () => {
             await db.collection('transaction').createIndex({ userId: 1, createdAt: -1 });
             await db.collection('transaction').createIndex({ userId: 1, date: -1, time: -1 });
             await db.collection('transaction').createIndex({ userId: 1, bankAccountId: 1, date: -1, time: -1 });
+            // For fast pattern based lookups
+            await db.collection('transaction').createIndex({ userId: 1, keyHash: 1 });
             // Natural key uniqueness (bank imports): prevent duplicates by (userId, bankAccountId, date, amount, title)
             try {
                 await db.collection('transaction').createIndex({ userId: 1, bankAccountId: 1, date: 1, amount: 1, title: 1 }, { unique: true, partialFilterExpression: { source: 'bank' }, name: 'uniq_bank_natural' });
@@ -36,6 +38,7 @@ const connectDB = async () => {
                 await db.collection('tx_patterns_global').createIndex({ supportCount: -1 });
                 await db.collection('tx_patterns_global').createIndex({ canonicalTitle: 1 });
                 await db.collection('tx_patterns_user').createIndex({ userId: 1, keyHash: 1 }, { unique: true });
+                await db.collection('tx_patterns_votes').createIndex({ updatedAt: -1 });
             }
             catch (pe) {
                 console.warn('Pattern indexes warning:', pe?.message);

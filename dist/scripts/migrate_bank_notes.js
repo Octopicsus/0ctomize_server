@@ -1,3 +1,5 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
 /**
  * Migration: Backfill bankAccountId from legacy notes field and clear technical notes markers.
  *
