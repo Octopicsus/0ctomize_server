@@ -20,7 +20,6 @@ import { getDB } from './middleware/database';
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
 
-// Early lightweight ping (before DB / session) for diagnosing startup hangs
 app.get('/__early', (_req: express.Request, res: express.Response) => { res.json({ ok: true }); });
 
 async function bootstrap() {
@@ -47,7 +46,6 @@ async function bootstrap() {
     app.use('/api/users', usersRoutes);
     app.use('/api/transactions', transactionsRoutes);
     app.use('/api/categories', categoriesRoutes);
-        // Trace middleware specifically for bankdata requests
         app.use((req: express.Request, _res: express.Response, next: express.NextFunction) => {
             if (req.url.startsWith('/api/bankdata')) {
                 console.log('[TRACE pre-bankdata]', req.method, req.url);
@@ -57,7 +55,6 @@ async function bootstrap() {
     app.use('/api/bankdata', bankdataRoutes);
     console.log('[DEBUG] bankdata routes mounted at /api/bankdata');
 
-    // Debug enrichment status endpoint
     app.get('/api/debug/enrich/status', async (_req, res) => {
         try {
             const db = getDB();
@@ -72,7 +69,6 @@ async function bootstrap() {
         }
     });
 
-    // Derived coverage / decision helper
     app.get('/api/debug/enrich/coverage', (_req, res) => {
         try {
             const summary = getCoverageSummary();
@@ -82,7 +78,6 @@ async function bootstrap() {
         }
     });
 
-    // SSE stream for enrichment metrics
     app.get('/api/debug/enrich/stream', (req, res) => {
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
@@ -98,19 +93,17 @@ async function bootstrap() {
         req.on('close', () => { clearInterval(interval); });
     });
 
-    // Start enrichment worker (polling) if not disabled
     if (process.env.DISABLE_ENRICH_WORKER !== '1') {
         const intervalMs = Number(process.env.ENRICH_TICK_MS || 5000);
         console.log(`[ENRICH] Worker enabled every ${intervalMs} ms`);
         setInterval(() => {
             runEnrichmentTick().catch(e => console.warn('[ENRICH] tick error', e.message));
         }, intervalMs).unref();
-        // Light-weight periodic coverage logging (every ~1 min)
+    
         const logEveryMs = 60000;
         setInterval(() => {
             const c = getCoverageSummary();
             if (c.totalPattern && c.totalPattern % 25 === 0) {
-                // also log on certain counts for more granular early phase
                 console.log(`[ENRICH][coverage milestone] totalPattern=${c.totalPattern} coverage=${c.coverage?.toFixed(3)} missRate=${c.missRate?.toFixed(3)} llmPerPattern=${c.llmPerPattern?.toFixed(3)}`);
             }
             console.log(`[ENRICH][coverage] coverage=${c.coverage?.toFixed(3)} missRate=${c.missRate?.toFixed(3)} llmPerPattern=${c.llmPerPattern?.toFixed(3)} suggestRuleExpansion=${c.suggestRuleExpansion}`);
@@ -119,7 +112,6 @@ async function bootstrap() {
         console.log('[ENRICH] Worker DISABLED via env');
     }
 
-    // Debug: list all registered routes to help diagnose 404s
         app.get('/api/_routes', (_req: express.Request, res: express.Response) => {
             const list: Array<{ method: string; path: string }> = [];
             const stack: any[] = (app as any)._router?.stack || [];

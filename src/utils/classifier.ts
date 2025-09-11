@@ -95,8 +95,10 @@ const EXPENSE_RULES: Rule[] = [
 ];
 
 // Income categories available:
-// Salary, Bonus, Investments, Revenue, Fee, Dividends, Pension, Inheritance, Rent Income, Other
+// Salary, Bonus, Investments, Revenue, Fee, Dividends, Pension, Inheritance, Rent Income, Exchange, Refound, Other
 const INCOME_RULES: Rule[] = [
+  // New: mark bank refunds "Refund From ..." as 'Refound'
+  { category: 'Refound', patterns: [/\brefund\s*from\b/i], weight: 1.3 },
   { category: 'Salary', patterns: [/\b(payroll|salary|wage|hr payment|paycheck)\b/i], weight: 1.3 },
   { category: 'Bonus', patterns: [/\b(bonus|award|incentive)\b/i] },
   { category: 'Investments', patterns: [/\b(investment|invest|capital gain)\b/i] },

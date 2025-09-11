@@ -29,13 +29,29 @@ export interface UserPatternDoc {
   updatedAt: Date;
 }
 
-// Normalize raw text (title + maybe creditor) into a stable key string
 export function buildRawKey(input: string): string {
   let s = (input || '').toLowerCase();
-  s = s.replace(/\d{4,}/g, ''); // remove long numeric sequences
+  s = s.replace(/\d{4,}/g, ''); 
   s = s.replace(/[\t\n]+/g, ' ');
   s = s.replace(/[_*`'"()\[\]{}<>]/g, ' ');
   s = s.replace(/\s{2,}/g, ' ').trim();
+  // Special normalization: treat all currency exchange titles as a single key
+  // Examples: "Exchanged to EUR", "Exchange USD -> CZK", "Exchanged EUR"
+  // Strategy: if the phrase contains the stem 'exchang', ignore currency codes/symbols and collapse to 'exchanged'
+  if (s.includes('exchang')) {
+    // Remove common currency codes and symbols and connectors
+    s = s
+      .replace(/\b(eur|usd|czk|pln|gbp|chf|sek|nok|dkk|huf|ron|uah|rub|cad|aud|nzd|jpy|cny)\b/g, ' ')
+      .replace(/[€$£¥₽₴]|kč|zł|lei/gi, ' ')
+      .replace(/\bto\b|->|<-|=>|<=|→|←|\/|\\/g, ' ')
+      .replace(/\s{2,}/g, ' ').trim();
+    s = 'exchanged';
+  }
+  // Normalize: 'refund from XYZ' -> 'refund from'
+  if (/\brefund\s*from\b/.test(s)) {
+    // Keep only the stable phrase, drop the sender to group all refunds as one key
+    s = 'refund from';
+  }
   return s.slice(0, 160);
 }
 
@@ -72,7 +88,7 @@ export async function upsertUserOverride(userId: any, keyHash: string, rawKey: s
   try {
     if (userId instanceof ObjectId) userIdObj = userId; else userIdObj = new ObjectId(String(userId));
   } catch {
-    userIdObj = new ObjectId(); // fallback improbable
+    userIdObj = new ObjectId(); 
   }
   const now = new Date();
   await db.collection('tx_patterns_user').updateOne(
@@ -88,8 +104,8 @@ export async function bumpUserOverrideUsage(userId: string, keyHash: string) {
   await db.collection('tx_patterns_user').updateOne({ userId: userIdObj, keyHash }, { $inc: { useCount: 1 }, $set: { updatedAt: new Date() } });
 }
 
-// --- Voting / consensus for global promotion ---
-const BLACKLIST_PATTERNS = ['payment', 'transfer', 'card', 'debit', 'credit']; // overly-generic keys we skip
+
+const BLACKLIST_PATTERNS = ['payment', 'transfer', 'card', 'debit', 'credit']; 
 
 export interface VoteResult {
   keyHash: string;
@@ -102,7 +118,7 @@ export interface VoteResult {
 export async function recordCategoryVote(userId: string, rawKey: string, category: string, opts: { promoteThreshold?: number; minUsers?: number; hysteresisDown?: number } = {}) {
   const promoteThreshold = opts.promoteThreshold ?? 0.8;
   const minUsers = opts.minUsers ?? 5;
-  const hysteresisDown = opts.hysteresisDown ?? 0.35; // for future use revert logic
+  const hysteresisDown = opts.hysteresisDown ?? 0.35; 
 
   const keyHash = hashKey(rawKey);
   const lower = (category || '').trim();
